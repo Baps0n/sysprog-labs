@@ -7,29 +7,49 @@
 static void
 execute_command_line(const struct command_line *line)
 {
-	/* REPLACE THIS CODE WITH ACTUAL COMMAND EXECUTION */
-
 	assert(line != NULL);
-	printf("================================\n");
-	printf("Command line:\n");
-	printf("Is background: %d\n", (int)line->is_background);
-	printf("Output: ");
 	if (line->out_type == OUTPUT_TYPE_STDOUT) {
-		printf("stdout\n");
 	} else if (line->out_type == OUTPUT_TYPE_FILE_NEW) {
-		printf("new file - \"%s\"\n", line->out_file.c_str());
 	} else if (line->out_type == OUTPUT_TYPE_FILE_APPEND) {
-		printf("append file - \"%s\"\n", line->out_file.c_str());
 	} else {
 		assert(false);
 	}
-	printf("Expressions:\n");
+	
 	for (const expr &e : line->exprs) {
 		if (e.type == EXPR_TYPE_COMMAND) {
-			printf("\tCommand: %s", e.cmd->exe.c_str());
-			for (const std::string& arg : e.cmd->args)
-				printf(" %s", arg.c_str());
-			printf("\n");
+			if (e.cmd->exe == "cd")	{
+				if (chdir(e.cmd->args[0].data()) != 0) {
+					perror("chdir");
+					exit(1);
+				}
+				continue;
+			}
+			else if (e.cmd->exe == "exit") {
+				exit(0);
+			}
+			
+			std::vector<char*> argv;
+			argv.push_back(const_cast<char*>(e.cmd->exe.data()));
+			for (const std::string& arg : e.cmd->args) {
+				argv.push_back(const_cast<char*>(arg.data()));
+			}
+			argv.push_back(nullptr);
+			pid_t pid = fork();
+
+			if (pid < 0) {
+				perror("fork");
+				return;
+			}
+			else if (pid == 0) {
+				execvp(e.cmd->exe.data(), argv.data());
+				perror("execvp");
+				exit(1);
+			}
+			
+			if (!line->is_background) {
+				int status;
+				waitpid(pid, &status, 0);
+			}
 		} else if (e.type == EXPR_TYPE_PIPE) {
 			printf("\tPIPE\n");
 		} else if (e.type == EXPR_TYPE_AND) {
