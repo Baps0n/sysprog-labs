@@ -360,51 +360,107 @@ coro_bus_try_broadcast(struct coro_bus *bus, unsigned data)
 #if NEED_BATCH
 
 int
-coro_bus_send_v(struct coro_bus *bus, int channel, const unsigned *data, unsigned count)
+coro_bus_send_v(struct coro_bus *bus, int channel_desc, const unsigned *data, unsigned count)
 {
-	/* IMPLEMENT THIS FUNCTION */
-	(void)bus;
-	(void)channel;
-	(void)data;
-	(void)count;
-	coro_bus_errno_set(CORO_BUS_ERR_NOT_IMPLEMENTED);
-	return -1;
+	int retval = -1;
+	while (retval < 0) {
+		retval = coro_bus_try_send_v(bus, channel_desc, data, count);
+		if (retval >= 0) {
+			break;
+		}
+		else if (coro_bus_errno() == CORO_BUS_ERR_WOULD_BLOCK) {
+			wakeup_queue_suspend_this(&bus->channels[channel_desc]->send_queue);
+		}
+		else {
+			return -1;
+		}
+	}
+
+	if (bus->channels[channel_desc]->data.size() < bus->channels[channel_desc]->size_limit) {
+		wakeup_queue_wakeup_first(&bus->channels[channel_desc]->send_queue);
+	}
+
+	return retval;
 }
 
 int
-coro_bus_try_send_v(struct coro_bus *bus, int channel, const unsigned *data, unsigned count)
+coro_bus_try_send_v(struct coro_bus *bus, int channel_desc, const unsigned *data, unsigned count)
 {
-	/* IMPLEMENT THIS FUNCTION */
-	(void)bus;
-	(void)channel;
-	(void)data;
-	(void)count;
-	coro_bus_errno_set(CORO_BUS_ERR_NOT_IMPLEMENTED);
-	return -1;
+	if (bus->channels == NULL || bus->channels[channel_desc] == NULL) {
+		coro_bus_errno_set(CORO_BUS_ERR_NO_CHANNEL);
+		return -1;
+	}
+	
+	size_t size_left = bus->channels[channel_desc]->size_limit - bus->channels[channel_desc]->data.size();
+	if (size_left <= 0) {
+		coro_bus_errno_set(CORO_BUS_ERR_WOULD_BLOCK);
+		return -1;
+	}
+
+	unsigned send_count = count;
+	if (count > size_left) {
+		send_count = size_left;
+	}
+
+	for (unsigned i = 0; i < send_count; i++) {
+		bus->channels[channel_desc]->data.push_back(data[i]);
+	}
+
+	wakeup_queue_wakeup_first(&bus->channels[channel_desc]->recv_queue);
+
+	return send_count;
 }
 
 int
-coro_bus_recv_v(struct coro_bus *bus, int channel, unsigned *data, unsigned capacity)
+coro_bus_recv_v(struct coro_bus *bus, int channel_desc, unsigned *data, unsigned capacity)
 {
-	/* IMPLEMENT THIS FUNCTION */
-	(void)bus;
-	(void)channel;
-	(void)data;
-	(void)capacity;
-	coro_bus_errno_set(CORO_BUS_ERR_NOT_IMPLEMENTED);
-	return -1;
+	int retval = -1;
+	while (retval < 0) {
+		retval = coro_bus_try_recv_v(bus, channel_desc, data, capacity);
+		if (retval >= 0) {
+			break;
+		}
+		else if (coro_bus_errno() == CORO_BUS_ERR_WOULD_BLOCK) {
+			wakeup_queue_suspend_this(&bus->channels[channel_desc]->recv_queue);
+		}
+		else {
+			return -1;
+		}
+	}
+	
+	if (!bus->channels[channel_desc]->data.empty()) {
+        wakeup_queue_wakeup_first(&bus->channels[channel_desc]->recv_queue);
+    }
+
+	return retval;
 }
 
 int
-coro_bus_try_recv_v(struct coro_bus *bus, int channel, unsigned *data, unsigned capacity)
+coro_bus_try_recv_v(struct coro_bus *bus, int channel_desc, unsigned *data, unsigned capacity)
 {
-	/* IMPLEMENT THIS FUNCTION */
-	(void)bus;
-	(void)channel;
-	(void)data;
-	(void)capacity;
-	coro_bus_errno_set(CORO_BUS_ERR_NOT_IMPLEMENTED);
-	return -1;
+	if (bus->channels == NULL || bus->channels[channel_desc] == NULL) {
+		coro_bus_errno_set(CORO_BUS_ERR_NO_CHANNEL);
+		return -1;
+	}
+
+	if (bus->channels[channel_desc]->data.empty()) {
+		coro_bus_errno_set(CORO_BUS_ERR_WOULD_BLOCK);
+		return -1;
+	}
+
+	unsigned recv_count = capacity;
+	if (capacity > bus->channels[channel_desc]->data.size()) {
+		recv_count = bus->channels[channel_desc]->data.size();
+	}
+
+	for (unsigned i = 0; i < recv_count; i++) {
+		data[i] = bus->channels[channel_desc]->data.front();
+		bus->channels[channel_desc]->data.erase(bus->channels[channel_desc]->data.begin());
+	}
+
+	wakeup_queue_wakeup_first(&bus->channels[channel_desc]->send_queue);
+
+	return recv_count;
 }
 
 #endif
