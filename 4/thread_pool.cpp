@@ -220,6 +220,7 @@ thread_task_join(struct thread_task *task)
 	while (!(task->state == TaskState::FINISHED)) {
 		pthread_cond_wait(&task->cond, &task->mutex);
 	}
+	task->pool = NULL;
 	pthread_mutex_unlock(const_cast<pthread_mutex_t*>(&task->mutex));
 
 	return 0;
@@ -256,6 +257,7 @@ thread_task_timed_join(struct thread_task *task, double timeout)
 			break;
 		}
 	}
+	task->pool = NULL;
 	pthread_mutex_unlock(const_cast<pthread_mutex_t*>(&task->mutex));
 
 	if (is_timeout) {
@@ -272,7 +274,7 @@ thread_task_delete(struct thread_task *task)
 {
 	pthread_mutex_lock(const_cast<pthread_mutex_t*>(&task->mutex));
 	bool in_pool = false;
-	if (task->state == TaskState::QUEUED || task->state == TaskState::RUNNING) {
+	if (task->pool != NULL) {
 		in_pool = true;
 	}
 	pthread_mutex_unlock(const_cast<pthread_mutex_t*>(&task->mutex));
@@ -310,7 +312,7 @@ thread_task_detach(struct thread_task *task)
 	if (!is_pushed) {
 		return TPOOL_ERR_TASK_NOT_PUSHED;
 	}
-
+	task->pool = NULL;
 	if (is_finished) {
 		thread_task_delete(task);
 		return 0;
