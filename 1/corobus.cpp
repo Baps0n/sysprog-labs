@@ -132,7 +132,7 @@ coro_bus_channel_open(struct coro_bus *bus, size_t size_limit)
 		new_channel_count = 1;
 	}
 
-	coro_bus_channel **new_channels = new coro_bus_channel*[new_channel_count];
+	coro_bus_channel **new_channels = new coro_bus_channel*[new_channel_count]();
 	std::copy(bus->channels, bus->channels + bus->channel_count, new_channels);
 	delete[] bus->channels;
 
