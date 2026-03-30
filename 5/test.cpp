@@ -26,7 +26,7 @@ test_msg_new(uint32_t len)
 	uint32_t size = len + 1;
 	test_msg *res;
 	constexpr std::align_val_t alignment{alignof(test_msg)};
-	uint8_t *blob = new (alignment) uint8_t[sizeof(*res) + size];
+	uint8_t *blob = new (alignment) uint8_t[sizeof(*res) + len];
 	res = (test_msg *)blob;
 	res->data = (char *)(res + 1);
 	res->len = len;
